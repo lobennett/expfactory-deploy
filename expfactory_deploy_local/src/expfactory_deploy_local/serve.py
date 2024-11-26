@@ -5,6 +5,7 @@ import os
 import sys
 import urllib
 from pathlib import Path
+import socket
 
 from .events import create_events_tsv, rename_exp_name
 from .utils import generate_experiment_context
@@ -85,6 +86,26 @@ experiments_dir = Path(static_dir, "experiments/")
 render = render_jinja(template_dir, encoding="utf-8")
 
 
+def is_port_available(port):
+    """Check if a port is available."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind(("0.0.0.0", port))
+            return True
+        except socket.error:
+            return False
+
+
+def find_available_port(start_port=8080, max_attempts=20):
+    """Find an available port starting from start_port."""
+    for port in range(start_port, start_port + max_attempts):
+        if is_port_available(port):
+            return port
+    raise RuntimeError(
+        f"No available ports found between {start_port} and {start_port + max_attempts - 1}"
+    )
+
+
 def run(args=None):
     args = parser.parse_args(args)
     if args.exps is not None:
@@ -141,11 +162,15 @@ def run(args=None):
     args.raw_dir.mkdir(parents=True, exist_ok=True)
     args.bids_dir.mkdir(parents=True, exist_ok=True)
 
-    # I think a directory starting with a period in the dirname of
-    # sys.argv[0] threw webpy run func for a loop.
-    # We don't need argv anymore so can clear it.
-    sys.argv = []
-    app.run()
+    # Find an available port
+    try:
+        port = find_available_port()
+        print(f"Starting server on port {port}")
+        sys.argv = ["", f"{port}"]
+        app.run()
+    except RuntimeError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
 
 
 def serve_experiment(experiment):

@@ -20,10 +20,15 @@ def rename_exp_name(exp_name):
         "visual_search_rdoc__fmri": "visualSearch",
     }
 
-    return rename_dict[exp_name]
+    return rename_dict.get(exp_name, exp_name)
 
 
 def create_events_tsv(data, exp_name):
+    # Load data if data is a string
+    if isinstance(data, str):
+        with open(data, "r") as f:
+            data = f.read()
+
     # Convert bytes to string if data is in bytes
     if isinstance(data, bytes):
         data = data.decode("utf-8")
@@ -38,6 +43,13 @@ def create_events_tsv(data, exp_name):
 
     df = pd.DataFrame(trialdata)
 
+    # Instead get the first elapsed of the row after fmri_wait_block_trigger_end
+    start = df.loc[df["trial_id"] == "fmri_wait_block_trigger_end"].index[0] + 1
+    start = df.loc[start]["time_elapsed"]
+    df["time_elapsed"] = df["time_elapsed"] - start
+    # filter for rows with non negative time_elapsed
+    df = df[df["time_elapsed"] >= 0]
+
     # Columns to keep
     common_columns = [
         "trial_id",
@@ -48,6 +60,9 @@ def create_events_tsv(data, exp_name):
         "include_subject",
         "block_num",
         "time_elapsed",
+        "stimulus_duration",
+        "trial_duration",
+        "diff",
     ]
 
     additional_columns = {
@@ -89,18 +104,15 @@ def create_events_tsv(data, exp_name):
         "visualSearch": ["target_present", "num_stimuli"],
     }
 
-    target_columns = common_columns + additional_columns[exp_name]
+    target_columns = common_columns + additional_columns.get(exp_name, [])
     existing_columns = [col for col in target_columns if col in df.columns]
     cleaned_df = df[existing_columns].copy()
     cleaned_df = cleaned_df.dropna(how="all")
-
-    if "trial_id" in cleaned_df.columns:
-        start_idx = cleaned_df[
-            cleaned_df["trial_id"] == "fmri_wait_block_initial"
-        ].index
-        if len(start_idx) > 0:
-            cleaned_df = cleaned_df.loc[start_idx[0] :].reset_index(drop=True)
-    else:
-        warnings.warn("No trial_id column found in the dataframe", UserWarning)
-
+    cleaned_df = cleaned_df.reset_index(drop=True)
     return cleaned_df
+
+
+if __name__ == "__main__":
+    df = create_events_tsv("./test_data/axCPT_24-11-25-21_58.json", "axCPT")
+    df.to_csv("./test_data/axCPT_24-11-25-21_58.tsv", sep="\t", index=False)
+    print(df)
