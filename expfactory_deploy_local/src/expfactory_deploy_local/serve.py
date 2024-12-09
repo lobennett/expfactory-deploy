@@ -215,10 +215,16 @@ class serve:
             data = web.data()
             fp.write(data)
 
-        bids_file = os.path.join(
-            web.config.bids_dir,
-            f"sub-{web.config.subject}_ses-{web.config.session}_task-{exp_name}_events.tsv",
-        )
+        if "survey" in exp_name:
+            bids_file = os.path.join(
+                web.config.bids_dir,
+                f"sub-{web.config.subject}_ses-{web.config.session}_task-{exp_name}.tsv",
+            )
+        else:
+            bids_file = os.path.join(
+                web.config.bids_dir,
+                f"sub-{web.config.subject}_ses-{web.config.session}_task-{exp_name}_events.tsv",
+            )
         df = create_events_tsv(data, exp_name)
         df.to_csv(bids_file, index=False)
         web.header("Content-Type", "application/json")

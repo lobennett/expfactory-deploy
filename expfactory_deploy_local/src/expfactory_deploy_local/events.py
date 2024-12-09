@@ -43,6 +43,9 @@ def create_events_tsv(data, exp_name):
 
     df = pd.DataFrame(trialdata)
 
+    if "survey" in exp_name:
+        return df
+
     # Instead get the first elapsed of the row after fmri_wait_block_trigger_end
     start = df.loc[df["trial_id"] == "fmri_wait_block_trigger_end"].index[0] + 1
     start = df.loc[start]["time_elapsed"]
