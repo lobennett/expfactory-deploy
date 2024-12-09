@@ -162,15 +162,11 @@ def run(args=None):
     args.raw_dir.mkdir(parents=True, exist_ok=True)
     args.bids_dir.mkdir(parents=True, exist_ok=True)
 
-    # Find an available port
-    try:
-        port = find_available_port()
-        print(f"Starting server on port {port}")
-        sys.argv = ["", f"{port}"]
-        app.run()
-    except RuntimeError as e:
-        print(f"Error: {e}")
-        sys.exit(1)
+    # Use fixed port 8080
+    port = 8080
+    print(f"Starting server on port {port}")
+    sys.argv = ["", f"{port}"]
+    app.run()
 
 
 def serve_experiment(experiment):
