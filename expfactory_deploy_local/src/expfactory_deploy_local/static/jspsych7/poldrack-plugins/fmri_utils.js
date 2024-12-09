@@ -4,12 +4,12 @@
 var check_index = {
   // Check key press for index finger.
   type: jsPsychHtmlKeyboardResponse,
-  stimulus: '<div><h1>Please press your index finger.</h1></div>',
-  choices: ['y'],
+  stimulus: "<div><h1>Please press your index finger.</h1></div>",
+  choices: ["y"],
   post_trial_gap: 500,
   data: function () {
     return {
-      trial_id: 'check_index',
+      trial_id: "check_index",
     };
   },
 };
@@ -17,12 +17,12 @@ var check_index = {
 var check_middle = {
   // Check key press for middle finger.
   type: jsPsychHtmlKeyboardResponse,
-  stimulus: '<div><h1>Please press your middle finger.</h1></div>',
-  choices: ['g'],
+  stimulus: "<div><h1>Please press your middle finger.</h1></div>",
+  choices: ["g"],
   post_trial_gap: 500,
   data: function () {
     return {
-      trial_id: 'check_middle',
+      trial_id: "check_middle",
     };
   },
 };
@@ -36,15 +36,15 @@ var fmri_wait_block_initial = {
   // Wait block for scanner setup.
   type: jsPsychHtmlKeyboardResponse,
   stimulus:
-    '<div><h1>Scanner setup.</h1><h1>Stay as still as possible.</h1><h1>Do not swallow.</h1></div>',
-  choices: ['Enter'],
+    "<div><h1>Scanner setup.</h1><h1>Stay as still as possible.</h1><h1>Do not swallow.</h1></div>",
+  choices: ["Enter"],
   data: function () {
     return {
-      trial_id: 'fmri_wait_block_initial',
+      trial_id: "fmri_wait_block_initial",
     };
   },
   on_finish: function () {
-    console.log('Finished fMRI initial wait block...');
+    console.log("Finished fMRI initial wait block...");
   },
 };
 
@@ -52,16 +52,16 @@ var fmri_wait_block_trigger_start = {
   // Wait block for task to start.
   type: jsPsychHtmlKeyboardResponse,
   stimulus:
-    '<div><h1>Task about to start!</h1><h1>Stay as still as possible.</h1><h1>Do not swallow.</h1></div>',
-  choices: ['t'],
+    "<div><h1>Task about to start!</h1><h1>Stay as still as possible.</h1><h1>Do not swallow.</h1></div>",
+  choices: ["t"],
   response_ends_trial: true,
   data: function () {
     return {
-      trial_id: 'fmri_wait_block_trigger_start',
+      trial_id: "fmri_wait_block_trigger_start",
     };
   },
   on_finish: function () {
-    console.log('Finished fMRI initial trigger block...');
+    console.log("Finished fMRI initial trigger block...");
   },
 };
 
@@ -69,17 +69,17 @@ var fmri_wait_block_trigger_end = {
   // Wait block for task to end.
   type: jsPsychHtmlKeyboardResponse,
   stimulus:
-    '<div><h1>Task about to start!</h1><h1>Stay as still as possible.</h1><h1>Do not swallow.</h1></div>',
-  choices: ['NO_KEYS'],
+    "<div><h1>Task about to start!</h1><h1>Stay as still as possible.</h1><h1>Do not swallow.</h1></div>",
+  choices: ["NO_KEYS"],
   trial_duration: 10880,
   response_ends_trial: false,
   data: function () {
     return {
-      trial_id: 'fmri_wait_block_trigger_end',
+      trial_id: "fmri_wait_block_trigger_end",
     };
   },
   on_finish: function () {
-    console.log('Finished fMRI trigger block...');
+    console.log("Finished fMRI trigger block...");
   },
 };
 
