@@ -21,7 +21,7 @@ def tempsymlink():
             if Path.is_symlink(local_static):
                 os.unlink(local_static)
         except IOError:
-            sys.stderr.write(f"Failed to unlink temporary symlink to static.")
+            sys.stderr.write("Failed to unlink temporary symlink to static.")
 
 def main():
     with tempsymlink() as _:

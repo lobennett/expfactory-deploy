@@ -1,10 +1,7 @@
 import argparse
 import datetime
-import json
 import os
 import sys
-import time
-import urllib
 from pathlib import Path
 
 from .utils import generate_experiment_context
@@ -68,7 +65,6 @@ def run(args=None):
         parser.print_help()
         sys.exit()
 
-    dne = [print(f"{e.absolute()} Does not exist. Ignoring") for e in experiments if not e.exists()]
     experiments = [e.absolute() for e in experiments if e.exists()]
 
     if len(experiments) == 0:
@@ -119,12 +115,12 @@ class reset:
 class serve:
     def GET(self):
         experiments = web.config.experiments
-        if session.get('experiments') == None:
+        if session.get('experiments') is None:
             session.experiments = [*experiments]
         if set(experiments) != set(session.experiments):
             session.experiments = [*experiments]
             session.incomplete = [*experiments]
-        if session.get('incomplete') == None:
+        if session.get('incomplete') is None:
             session.incomplete = [*experiments]
 
         if len(session.incomplete) == 0:
