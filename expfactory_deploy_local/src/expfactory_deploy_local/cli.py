@@ -4,9 +4,10 @@ from pathlib import Path
 from contextlib import contextmanager
 from .serve import static_dir, run
 
+
 @contextmanager
 def tempsymlink():
-    local_static = Path(os.getcwd(), 'static/')
+    local_static = Path(os.getcwd(), "static/")
     if not local_static == static_dir:
         try:
             os.symlink(static_dir, local_static)
@@ -22,6 +23,7 @@ def tempsymlink():
                 os.unlink(local_static)
         except IOError:
             sys.stderr.write("Failed to unlink temporary symlink to static.")
+
 
 def main():
     with tempsymlink() as _:

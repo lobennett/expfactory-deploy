@@ -17,7 +17,9 @@ urls = ("/", "serve", "/serve", "serve", "/decline", "decline", "/reset", "reset
 
 app = web.application(urls, globals())
 session = web.session.Session(
-    app, web.session.DiskStore(Path(package_dir, "sessions")), initializer={"incomplete": None }
+    app,
+    web.session.DiskStore(Path(package_dir, "sessions")),
+    initializer={"incomplete": None},
 )
 
 parser = argparse.ArgumentParser(description="Start a local deployment of a battery")
@@ -27,18 +29,18 @@ group.add_argument(
     metavar="EXP_config",
     type=Path,
     help="Path to a single experiment or path to a configuration file. Configuration file should be a single path to an experiment per line.",
-    nargs='?'
+    nargs="?",
 )
 group.add_argument(
-    '-e',
-    '--exps',
+    "-e",
+    "--exps",
     help="Comma delimited list of paths to experiments. Mutually exclusive with exp_config",
-    type=lambda x: [Path(y) for y in x.split(',')]
+    type=lambda x: [Path(y) for y in x.split(",")],
 )
 parser.add_argument(
-    '-gi',
-    '--group_index',
-    help="Inject a group_index variable into the experiment context."
+    "-gi",
+    "--group_index",
+    help="Inject a group_index variable into the experiment context.",
 )
 
 experiments = []
@@ -48,16 +50,17 @@ static_dir = Path(package_dir, "static/")
 experiments_dir = Path(static_dir, "experiments/")
 render = render_jinja(template_dir, encoding="utf-8")
 
+
 def run(args=None):
     args = parser.parse_args(args)
-    if (args.exps is not None):
+    if args.exps is not None:
         experiments = args.exps
-    elif (args.exp_config is not None):
-        if (args.exp_config.is_file()):
+    elif args.exp_config is not None:
+        if args.exp_config.is_file():
             with open(args.exp_config) as fp:
                 experiments = [Path(x.strip()) for x in fp.readlines()]
         else:
-            experiments=[args.exp_config]
+            experiments = [args.exp_config]
     else:
         print("Found arguments:")
         print(args)
@@ -82,9 +85,9 @@ def run(args=None):
             os.unlink(Path(experiments_dir, experiment.stem))
             os.symlink(experiment, Path(experiments_dir, experiment.stem))
 
-    web.config.update({'experiments': experiments})
-    if (args.group_index is not None):
-        web.config.update({'group_index': args.group_index})
+    web.config.update({"experiments": experiments})
+    if args.group_index is not None:
+        web.config.update({"group_index": args.group_index})
 
     # webpy is opinionated about sys.argv. Set it to something it can handle
     port = 8080
@@ -100,27 +103,32 @@ def run(args=None):
             port += 1
             sys.argv = [None, str(port)]
 
+
 def serve_experiment(experiment):
     exp_name = experiment.stem
-    context = generate_experiment_context(Path(experiments_dir, exp_name), "/", f"/static/experiments/{exp_name}")
-    if (web.config.get('group_index', None)):
-        context['group_index'] = web.config.group_index
+    context = generate_experiment_context(
+        Path(experiments_dir, exp_name), "/", f"/static/experiments/{exp_name}"
+    )
+    if web.config.get("group_index", None):
+        context["group_index"] = web.config.group_index
     return render.deploy_template(**context)
+
 
 class reset:
     def GET(self):
         session.kill()
         return '<html><body>Reset session, <a href="/">back to / </a></body></html>'
 
+
 class serve:
     def GET(self):
         experiments = web.config.experiments
-        if session.get('experiments') is None:
+        if session.get("experiments") is None:
             session.experiments = [*experiments]
         if set(experiments) != set(session.experiments):
             session.experiments = [*experiments]
             session.incomplete = [*experiments]
-        if session.get('incomplete') is None:
+        if session.get("incomplete") is None:
             session.incomplete = [*experiments]
 
         if len(session.incomplete) == 0:
@@ -131,7 +139,7 @@ class serve:
     def POST(self):
         exp_name = session.incomplete.pop()
         date = datetime.datetime.utcnow().strftime("%y-%m-%d-%H:%M")
-        output_file = f'{exp_name}_{date}.json'
+        output_file = f"{exp_name}_{date}.json"
         with open(output_file, "ab") as fp:
             data = web.data()
             fp.write(data)
