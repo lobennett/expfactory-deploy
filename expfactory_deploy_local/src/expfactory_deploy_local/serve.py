@@ -8,7 +8,7 @@ from .utils import generate_experiment_context
 import web
 from web.contrib.template import render_jinja
 
-from .preprocess import create_events_file, rename_task
+from .preprocess import raw_to_df
 
 web.config.debug = False
 
@@ -17,11 +17,21 @@ package_dir = os.path.dirname(os.path.abspath(__file__))
 urls = ("/", "serve", "/serve", "serve", "/decline", "decline", "/reset", "reset")
 
 app = web.application(urls, globals())
-session = web.session.Session(
-    app,
-    web.session.DiskStore(Path(package_dir, "sessions")),
-    initializer={"incomplete": None},
-)
+
+
+# Function to create a session with unique storage based on port
+def get_session(port=8080):
+    session_path = Path(package_dir, f"sessions_{port}")
+    session_path.mkdir(exist_ok=True)
+    return web.session.Session(
+        app,
+        web.session.DiskStore(session_path),
+        initializer={"incomplete": None},
+    )
+
+
+# Default session - will be replaced in run()
+session = get_session()
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -139,10 +149,16 @@ def run(args=None):
     started = False
     while port < 10000 and not started:
         try:
+            # Update session with port-specific storage
+            global session
+            session = get_session(port)
+
+            sys.argv = [None, str(port)]
+            print(f"Starting server on port {port}")
             app.run()
             started = True
         except OSError as e:
-            print(e)
+            print(f"Port {port} is in use, trying next port...")
             port += 1
             sys.argv = [None, str(port)]
 
@@ -180,70 +196,110 @@ class serve:
         return serve_experiment(exp_to_serve)
 
     def POST(self):
-        exp_name = session.incomplete.pop()
+        # Get the data first to ensure we can process it regardless of session state
+        data = web.data()
         date = str(int(datetime.datetime.now(datetime.timezone.utc).timestamp()))
-        exp_name_stem = rename_task(exp_name.stem)
 
-        raw_datafile = f"task-{exp_name_stem}_dateTime-{date}.json"
-        bids_datafile = f"task-{exp_name_stem}.tsv"
+        # Try to get the experiment name from the session
+        try:
+            if session.get("incomplete") is None or len(session.incomplete) == 0:
+                # If session.incomplete is None or empty, try to reinitialize from web.config
+                if hasattr(web.config, "experiments") and web.config.experiments:
+                    session.incomplete = [*web.config.experiments]
 
-        # Add bids naming conventions if provided
-        if web.config.session_num:
-            raw_datafile = f"ses-{web.config.session_num}_{raw_datafile}"
-            bids_datafile = f"ses-{web.config.session_num}_{bids_datafile}"
-        if web.config.subject_id:
-            raw_datafile = f"sub-{web.config.subject_id}_{raw_datafile}"
-            bids_datafile = f"sub-{web.config.subject_id}_{bids_datafile}"
-        if web.config.run_num:
-            raw_datafile = raw_datafile.replace(
-                ".json", f"_run-{web.config.run_num}.json"
-            )
-            bids_datafile = bids_datafile.replace(
-                ".tsv", f"_run-{web.config.run_num}.tsv"
-            )
-
-        if web.config.raw_dir:
-            if web.config.subject_id:
-                sub_dir = os.path.join(
-                    web.config.raw_dir, f"sub-{web.config.subject_id}"
-                )
-                if web.config.session_num:
-                    sub_ses_dir = os.path.join(
-                        sub_dir, f"ses-{web.config.session_num}", "func"
-                    )
-                    os.makedirs(sub_ses_dir, exist_ok=True)
-                    raw_datafile = os.path.join(sub_ses_dir, raw_datafile)
-                else:
-                    raw_datafile = os.path.join(sub_dir, raw_datafile)
+            # Only pop if we have items
+            if session.incomplete and len(session.incomplete) > 0:
+                exp_name = session.incomplete.pop()
             else:
-                raw_datafile = os.path.join(web.config.raw_dir, raw_datafile)
-
-        if web.config.bids_dir:
-            if web.config.subject_id:
-                sub_dir = os.path.join(
-                    web.config.bids_dir, f"sub-{web.config.subject_id}"
+                # If we still don't have experiments, use a default name
+                exp_name = Path("unknown_experiment")
+                print(
+                    "Warning: No experiments in session.incomplete, using default name"
                 )
-                if web.config.session_num:
-                    sub_ses_dir = os.path.join(
-                        sub_dir, f"ses-{web.config.session_num}", "func"
-                    )
-                    os.makedirs(sub_ses_dir, exist_ok=True)
-                    bids_datafile = os.path.join(sub_ses_dir, bids_datafile)
-                else:
-                    bids_datafile = os.path.join(sub_dir, bids_datafile)
-            else:
-                bids_datafile = os.path.join(web.config.bids_dir, bids_datafile)
+        except Exception as e:
+            # Handle any other session-related errors
+            print(f"Error accessing session data: {e}")
+            exp_name = Path("unknown_experiment")
 
-        with open(raw_datafile, "ab") as fp:
-            data = web.data()
+        # Process the data
+        df, exp_id = raw_to_df(data)
+
+        # Base filename for raw data
+        raw_datafile = f"task-{exp_id}_dateTime-{date}.json"
+        events_datafile = f"task-{exp_id}.csv"
+
+        # Get metadata from web.config
+        subject_id = getattr(web.config, "subject_id", None)
+        session_num = getattr(web.config, "session_num", None)
+        run_num = getattr(web.config, "run_num", None)
+        raw_dir = getattr(web.config, "raw_dir", None)
+        bids_dir = getattr(web.config, "bids_dir", None)
+
+        # Build BIDS-compliant filename prefix
+        prefix = ""
+        if subject_id:
+            prefix += f"sub-{subject_id}_"
+        if session_num:
+            prefix += f"ses-{session_num}_"
+        if run_num:
+            prefix += f"run-{run_num}_"
+
+        # Apply prefix to filenames
+        raw_filename = f"{prefix}{raw_datafile}"
+        events_filename = f"{prefix}{events_datafile}"
+
+        # Setup paths for raw data
+        raw_path = raw_filename
+        if raw_dir:
+            if subject_id:
+                # Create subject directory
+                sub_dir = os.path.join(raw_dir, f"sub-{subject_id}")
+                os.makedirs(sub_dir, exist_ok=True)
+
+                if session_num:
+                    # Create session directory
+                    ses_dir = os.path.join(sub_dir, f"ses-{session_num}")
+                    os.makedirs(ses_dir, exist_ok=True)
+                    raw_path = os.path.join(ses_dir, raw_filename)
+                else:
+                    raw_path = os.path.join(sub_dir, raw_filename)
+            else:
+                os.makedirs(raw_dir, exist_ok=True)
+                raw_path = os.path.join(raw_dir, raw_filename)
+
+        # Save raw data
+        with open(raw_path, "wb") as fp:
             fp.write(data)
-            print("Saved raw datafile to: ", raw_datafile)
+            print(f"Saved raw data to: {raw_path}")
+
+        # Setup and save BIDS events file if this is an fMRI experiment
+        exp_stem = getattr(exp_name, "stem", str(exp_name))
+        if bids_dir and exp_stem and "__fmri" in exp_stem:
+            bids_path = events_filename
+
+            # Create BIDS directory structure
+            if subject_id:
+                sub_dir = os.path.join(bids_dir, f"sub-{subject_id}")
+                os.makedirs(sub_dir, exist_ok=True)
+
+                if session_num:
+                    ses_dir = os.path.join(sub_dir, f"ses-{session_num}")
+                    func_dir = os.path.join(ses_dir, "func")
+                    os.makedirs(func_dir, exist_ok=True)
+                    bids_path = os.path.join(func_dir, events_filename)
+                else:
+                    func_dir = os.path.join(sub_dir, "func")
+                    os.makedirs(func_dir, exist_ok=True)
+                    bids_path = os.path.join(func_dir, events_filename)
+            else:
+                os.makedirs(bids_dir, exist_ok=True)
+                bids_path = os.path.join(bids_dir, events_filename)
+
+            # Save BIDS events file
+            df.to_csv(bids_path, index=False)
+            print(f"Saved BIDS events to: {bids_path}")
 
         web.header("Content-Type", "application/json")
-
-        if "practice" not in exp_name_stem:
-            create_events_file(web.data(), bids_datafile)
-
         return "{'success': true}"
 
 

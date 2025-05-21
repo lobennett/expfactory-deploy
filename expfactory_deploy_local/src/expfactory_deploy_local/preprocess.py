@@ -1,71 +1,54 @@
 import json
-import polars as pl
+
+import pandas as pd
 
 
-def rename_task(task_name: str) -> str:
-    """Rename a task to a BIDS-compliant name.
-
-    Args:
-        task_name (str): The name of the task to rename.
-
-    Returns:
-        str: The BIDS-compliant name of the task.
-    """
-    task_rename_mappings = {
-        "ax_cpt_rdoc__fmri": "axCPT",
-        "cued_task_switching_rdoc__fmri": "cuedTS",
-        "flanker_rdoc__fmri": "flanker",
-        "go_nogo_rdoc__fmri": "goNogo",
-        "n_back_rdoc__fmri": "nBack",
-        "operation_only_span_rdoc__fmri": "opOnlySpan",
-        "operation_span_rdoc__fmri": "opSpan",
-        "simple_span_rdoc__fmri": "simpleSpan",
-        "spatial_cueing_rdoc__fmri": "spatialCueing",
-        "spatial_task_switching_rdoc__fmri": "spatialTS",
-        "stop_signal_rdoc__fmri": "stopSignal",
-        "stroop_rdoc__fmri": "stroop",
-        "visual_search_rdoc__fmri": "visualSearch",
-    }
-    return task_rename_mappings.get(task_name, task_name)
-
-
-def create_events_file(data: str, bids_datafile: str) -> pl.DataFrame:
-    """Create a BIDS events file from the raw data.
+def raw_to_df(raw_data) -> tuple[pd.DataFrame, str]:
+    """Convert raw data to a pandas DataFrame.
 
     Args:
-        data (str): The raw data as a JSON string.
-        bids_datafile (str): The path to the BIDS events file to save.
+        raw_data: Either a file path (str) or raw data (bytes).
 
     Returns:
-        pl.DataFrame: The BIDS events data as a Polars DataFrame.
+        tuple[pd.DataFrame, str]: A tuple containing the pandas
+        DataFrame containing the trial data and the experiment ID.
     """
-    data = json.loads(data)
+    print(raw_data)
+    if isinstance(raw_data, str):
+        # It's a file path
+        with open(raw_data, "r") as f:
+            data = json.load(f)
+    elif isinstance(raw_data, bytes):
+        # It's bytes data
+        data = json.loads(raw_data.decode("utf-8"))
+    else:
+        # Invalid input type
+        raise TypeError(f"Expected str or bytes, got {type(raw_data)}")
+
+    # Get the trial data
     trialdata = json.loads(data["trialdata"])
+    parsed_trialdata = pd.DataFrame(trialdata)
 
-    flattened_data = []
-    for trial in trialdata:
-        flat_trial = {}
-        for key, value in trial.items():
-            if isinstance(value, (dict, list)):
-                flat_trial[key] = json.dumps(value)
-            else:
-                flat_trial[key] = value
-        flattened_data.append(flat_trial)
+    # Try to get experiment ID from different potential locations
+    exp_id = None
 
-    df = pl.DataFrame(flattened_data)
-    start_trial = df.filter(pl.col("trial_id") == "fmri_wait_block_trigger_start")
-    start_trial_end = start_trial.select("time_elapsed").to_series()[0]
+    # First check if it's directly in the data dict (from our template update)
+    if "exp_id" in data:
+        exp_id = data["exp_id"]
+    # Then check if it's in the trial data
+    elif parsed_trialdata.get("exp_id") is not None:
+        exp_id = parsed_trialdata["exp_id"]
 
-    # Create a mask that becomes True at fmri_wait_block_trigger_end
-    # and stays True thereafter
-    mask = (pl.col("trial_id") == "fmri_wait_block_trigger_end").cum_max()
-    events_df = df.filter(mask)
-    events_df = events_df.with_columns(
-        (pl.col("time_elapsed") - start_trial_end - pl.col("block_duration")).alias(
-            "onset"
-        )
-    )
+    # Handle different data formats
+    if isinstance(exp_id, pd.Series):
+        exp_id = exp_id.dropna().iloc[0]
+    elif isinstance(exp_id, str):
+        pass  # Already a string
+    elif isinstance(exp_id, list) and len(exp_id) > 0:
+        exp_id = exp_id[0]
+    else:
+        # Fallback if exp_id can't be determined
+        exp_id = "unknown"
+        print("Warning: Could not determine exp_id, using 'unknown'")
 
-    events_df.write_csv(bids_datafile, separator="\t")
-    print(f"Saved events datafile to: {bids_datafile}")
-    return events_df
+    return pd.DataFrame(trialdata), exp_id
